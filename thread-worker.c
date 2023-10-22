@@ -103,52 +103,71 @@ void worker_exit(void *value_ptr) {
 
 /* Wait for thread termination */
 int worker_join(worker_t thread, void **value_ptr) {
-	
-	// - wait for a specific thread to terminate
-	// - de-allocate any dynamic memory created by the joining thread
-  
-	// YOUR CODE HERE
-	return 0;
-};
+    // For simplicity, we will perform busy-waiting. In a real-world scenario,
+    // you'd want to have a more efficient way of waiting, like blocking the current thread.
+    while (1) {
+        // Check if the thread is terminated
+        // This assumes that you have a function `is_thread_terminated` that checks the status of the thread
+        if (is_thread_terminated(thread)) {
+            // De-allocate any dynamic memory created by the joining thread
+            // This assumes you have kept a record of thread's resources
+            free_thread_resources(thread);
+            break;
+        }
+    }
+    return 0;
+}
 
 /* initialize the mutex lock */
-int worker_mutex_init(worker_mutex_t *mutex, 
-                          const pthread_mutexattr_t *mutexattr) {
-	//- initialize data structures for this mutex
+int worker_mutex_init(worker_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
+    // Initialize the mutex's fields
+    mutex->is_locked = 0;    // Mutex is initially unlocked
+    mutex->owner = NULL;    // No owner at the start
+    return 0;
+}
 
-	// YOUR CODE HERE
-	return 0;
-};
-
-/* aquire the mutex lock */
+/* acquire the mutex lock */
 int worker_mutex_lock(worker_mutex_t *mutex) {
-
-        // - use the built-in test-and-set atomic function to test the mutex
-        // - if the mutex is acquired successfully, enter the critical section
-        // - if acquiring mutex fails, push current thread into block list and
-        // context switch to the scheduler thread
-
-        // YOUR CODE HERE
-        return 0;
-};
+    while (__sync_lock_test_and_set(&(mutex->is_locked), 1)) {
+        // If the mutex is already locked, push the current thread into a block list
+        // This assumes you have a function `block_current_thread` to block the current thread
+        block_current_thread();
+        
+        // Context switch to the scheduler thread
+        setcontext(&scheduler_context);
+    }
+    // Set the current thread as the owner of the mutex
+    mutex->owner = current_thread;
+    return 0;
+}
 
 /* release the mutex lock */
 int worker_mutex_unlock(worker_mutex_t *mutex) {
-	// - release mutex and make it available again. 
-	// - put threads in block list to run queue 
-	// so that they could compete for mutex later.
-
-	// YOUR CODE HERE
-	return 0;
-};
-
+    // Check if the current thread is the owner of the mutex
+    if (mutex->owner != current_thread) {
+        // The current thread is not the owner, so it cannot unlock the mutex
+        return -1;  // Error code
+    }
+    // Release the mutex
+    mutex->owner = NULL;
+    __sync_lock_release(&(mutex->is_locked));
+    
+    // Put threads in block list to the run queue
+    // This assumes you have a function `move_blocked_to_ready` to move blocked threads to the ready queue
+    move_blocked_to_ready();
+    return 0;
+}
 
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex) {
-	// - de-allocate dynamic memory created in worker_mutex_init
-
-	return 0;
-};
+    // Check if the mutex is locked
+    if (mutex->is_locked) {
+        return -1;  // Cannot destroy a locked mutex
+    }
+    // De-allocate dynamic memory created in worker_mutex_init
+    // In this example, we didn't allocate any dynamic memory, but you'd want to free any resources here if you did
+    return 0;
+}
 
 /* scheduler */
 static void schedule() {
