@@ -1,8 +1,8 @@
 // File:	worker_t.h
 
-// List all group member's name:
-// username of iLab:
-// iLab Server:
+// List all group member's name: Tasha Pais 
+// username of iLab: tdp74
+// iLab Server: rlab2
 
 #ifndef WORKER_T_H
 #define WORKER_T_H
@@ -18,26 +18,32 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ucontext.h>
 
 typedef uint worker_t;
 
-typedef struct TCB {
-	/* add important states in a thread control block */
-	// thread Id
-	// thread status
-	// thread context
-	// thread stack
-	// thread priority
-	// And more ...
+// Enumeration for thread status
+typedef enum {
+    THREAD_READY,
+    THREAD_RUNNING,
+    THREAD_BLOCKED,
+    THREAD_TERMINATED
+} ThreadStatus;
 
-	// YOUR CODE HERE
-} tcb; 
+typedef struct TCB {
+    worker_t thread_id;              // Unique thread ID
+    ThreadStatus status;             // Thread's current status
+    ucontext_t context;              // Context for the thread
+    void *stack;                     // Pointer to the thread's stack
+    int priority;                    // Thread's priority (if used)
+    // Add more fields if necessary
+} tcb;
 
 /* mutex struct definition */
 typedef struct worker_mutex_t {
-	/* add something here */
-
-	// YOUR CODE HERE
+    int is_locked;                   // Indicates if the mutex is locked (1 for locked, 0 for unlocked)
+    tcb *owner;                      // Pointer to the TCB of the thread which currently holds the mutex
+    // Add more fields if necessary, e.g., a waiting list for threads waiting for this mutex
 } worker_mutex_t;
 
 /* define your data structures here: */
