@@ -121,6 +121,7 @@ int worker_yield() {
     getcontext(&(current_thread->context));
 
     // Change the thread's state to ready and add it to the ready queue
+    current_thread->status = THREAD_READY;
     enqueue(current_thread);
 
     // Switch to the scheduler's context
@@ -130,6 +131,9 @@ int worker_yield() {
 }
 
 void worker_exit(void *value_ptr) {
+    // Set the current thread's status to terminated
+    current_thread->status = THREAD_TERMINATED;
+
     // Free the allocated stack and TCB of the current thread
     free(current_thread->stack);
     free(current_thread);
@@ -138,23 +142,71 @@ void worker_exit(void *value_ptr) {
     setcontext(&scheduler_context);
 }
 
+tcb* get_tcb_by_id(worker_t thread_id) {
+    ThreadNode* temp = head;  // Assuming 'head' is the starting point of your global list of TCBs
 
-/* Wait for thread termination */
+    while (temp) {
+        if (temp->thread->thread_id == thread_id) {
+            return temp->thread;
+        }
+        temp = temp->next;
+    }
+
+    return NULL;  // Return NULL if no matching TCB is found
+}
+
+int is_thread_terminated(worker_t thread_id) {
+    tcb* thread_tcb = get_tcb_by_id(thread_id);
+    if (!thread_tcb) return 0;  // Return 0 if thread not found (or you can handle this case differently)
+    return (thread_tcb->status == THREAD_TERMINATED);
+}
+void free_thread_resources(worker_t thread_id) {
+    // Check if the list is empty
+    if (!head) return;
+
+    // Special case: if the thread to be removed is at the head of the list
+    if (head->thread->thread_id == thread_id) {
+        ThreadNode *temp = head;
+        head = head->next;
+        free(temp);
+        return;
+    }
+
+    // Traverse the list to find the node to be removed
+    ThreadNode *prev = head;
+    ThreadNode *current = head->next;
+    while (current != NULL && current->thread->thread_id != thread_id) {
+        prev = current;
+        current = current->next;
+    }
+
+    // If the thread is not found
+    if (!current) return;
+
+    // Adjust the pointers to unlink the node
+    prev->next = current->next;
+
+    // If the thread to be removed is at the tail of the list
+    if (tail == current) {
+        tail = prev;
+    }
+
+    // Free the node
+    free(current);
+}
+
 int worker_join(worker_t thread, void **value_ptr) {
     // For simplicity, we will perform busy-waiting. In a real-world scenario,
     // you'd want to have a more efficient way of waiting, like blocking the current thread.
     while (1) {
-        // Check if the thread is terminated
-        // This assumes that you have a function `is_thread_terminated` that checks the status of the thread
         if (is_thread_terminated(thread)) {
-            // De-allocate any dynamic memory created by the joining thread
-            // This assumes you have kept a record of thread's resources
             free_thread_resources(thread);
             break;
         }
     }
     return 0;
 }
+
 
 /* initialize the mutex lock */
 int worker_mutex_init(worker_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
