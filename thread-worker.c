@@ -90,17 +90,54 @@ void init_timer() {
     timer.it_value.tv_sec = 1;
     setitimer(ITIMER_PROF, &timer, NULL);
 }
+/* scheduler */
+static void schedule() {
+	// - every time a timer interrupt occurs, your worker thread library 
+	// should be contexted switched from a thread context to this 
+	// schedule() function
+
+	// - invoke scheduling algorithms according to the policy (PSJF or MLFQ)
+
+	// if (sched == PSJF)
+	//		sched_psjf();
+	// else if (sched == MLFQ)
+	// 		sched_mlfq();
+
+	// YOUR CODE HERE
+
+// // - schedule policy
+// #ifndef MLFQ
+// 	// Choose PSJF
+// #else 
+// 	// Choose MLFQ
+// #endif
+	//simple round robin 
+    while (1) {
+        current_thread = dequeue(&ready_queue);
+        if (current_thread) {
+            setcontext(&(current_thread->context));
+        } else {
+            // If there are no more threads, exit the scheduler
+            break;
+        }
+    }
+}
+
+// Initialize the scheduler's context. This should be called once.
+void init_scheduler() {
+    getcontext(&scheduler_context);
+    scheduler_context.uc_stack.ss_sp = malloc(SIGSTKSZ);
+    scheduler_context.uc_stack.ss_size = SIGSTKSZ;
+    scheduler_context.uc_link = 0;
+    makecontext(&scheduler_context, schedule, 0);
+}
 
 int worker_create(worker_t *thread, pthread_attr_t *attr, 
                   void *(*function)(void*), void *arg) {
     static int firstCall = 1;
     if (firstCall) {
         firstCall = 0; //separate scheduler context initialized the first time worker_create() is called
-        getcontext(&scheduler_context);
-        scheduler_context.uc_stack.ss_sp = malloc(SIGSTKSZ);
-        scheduler_context.uc_stack.ss_size = SIGSTKSZ;
-        scheduler_context.uc_link = 0; // No next context after scheduler ends (though it shouldn't end)
-        makecontext(&scheduler_context, schedule, 0); // Assuming you have a scheduler function
+        init_scheduler();
         init_timer();
     }
 
@@ -120,7 +157,8 @@ int worker_create(worker_t *thread, pthread_attr_t *attr,
     newThread->context.uc_link = &scheduler_context;
 
     // Set up the thread's context to execute the given function
-    makecontext(&(newThread->context), (void (*)())function, 1, arg);
+    makecontext(&(newThread->context), (void (*)())function, 2, (int)(uintptr_t)arg, (int)((uintptr_t)arg >> 32));
+
 
     // Add the thread to the ready queue
     enqueue(&ready_queue, newThread);
@@ -288,49 +326,6 @@ int worker_mutex_destroy(worker_mutex_t *mutex) {
     // In this example, we didn't allocate any dynamic memory, but you'd want to free any resources here if you did
     return 0;
 }
-
-/* scheduler */
-static void schedule() {
-	// - every time a timer interrupt occurs, your worker thread library 
-	// should be contexted switched from a thread context to this 
-	// schedule() function
-
-	// - invoke scheduling algorithms according to the policy (PSJF or MLFQ)
-
-	// if (sched == PSJF)
-	//		sched_psjf();
-	// else if (sched == MLFQ)
-	// 		sched_mlfq();
-
-	// YOUR CODE HERE
-
-// // - schedule policy
-// #ifndef MLFQ
-// 	// Choose PSJF
-// #else 
-// 	// Choose MLFQ
-// #endif
-	//simple round robin 
-    while (1) {
-        current_thread = dequeue(&ready_queue);
-        if (current_thread) {
-            setcontext(&(current_thread->context));
-        } else {
-            // If there are no more threads, exit the scheduler
-            break;
-        }
-    }
-}
-
-// Initialize the scheduler's context. This should be called once.
-void init_scheduler() {
-    getcontext(&scheduler_context);
-    scheduler_context.uc_stack.ss_sp = malloc(SIGSTKSZ);
-    scheduler_context.uc_stack.ss_size = SIGSTKSZ;
-    scheduler_context.uc_link = 0;
-    makecontext(&scheduler_context, schedule, 0);
-}
-
 /* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
 static void sched_psjf() {
 	// - your own implementation of PSJF
@@ -351,9 +346,8 @@ static void sched_mlfq() {
 //DO NOT MODIFY THIS FUNCTION
 /* Function to print global statistics. Do not modify this function.*/
 void print_app_stats(void) {
-
-       fprintf(stderr, "Total context switches %ld \n", tot_cntx_switches);
-       fprintf(stderr, "Average turnaround time %lf \n", avg_turn_time);
-       fprintf(stderr, "Average response time  %lf \n", avg_resp_time);
+    fprintf(stderr, "Total context switches %ld \n", tot_cntx_switches);
+    fprintf(stderr, "Average turnaround time %lf \n", avg_turn_time);
+    fprintf(stderr, "Average response time  %lf \n", avg_resp_time);
 }
 

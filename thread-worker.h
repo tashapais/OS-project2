@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdint.h>
 
+
 typedef uint32_t worker_t;
 
 // Enumeration for thread status
@@ -49,12 +50,6 @@ typedef struct worker_mutex_t {
     tcb *owner;                      // Pointer to the TCB of the thread which currently holds the mutex
     // Add more fields if necessary, e.g., a waiting list for threads waiting for this mutex
 } worker_mutex_t;
-
-/* define your data structures here: */
-// Feel free to add your own auxiliary data structures (linked list or queue etc...)
-
-// YOUR CODE HERE
-
 
 /* Function Declarations: */
 
@@ -84,6 +79,7 @@ int worker_mutex_unlock(worker_mutex_t *mutex);
 /* destroy the mutex */
 int worker_mutex_destroy(worker_mutex_t *mutex);
 
+void init_scheduler();
 
 /* Function to print global statistics. Do not modify this function.*/
 void print_app_stats(void);

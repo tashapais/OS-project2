@@ -4,7 +4,7 @@
 #include "thread-worker.h"
 
 // Function that will be executed in one of the threads
-void foo(void *arg) {
+void* foo(void *arg) {
     while (1) {
         printf("foo\n");
         sleep(1);  // Sleep to avoid flooding the console
@@ -12,7 +12,7 @@ void foo(void *arg) {
 }
 
 // Function that will be executed in another thread
-void bar(void *arg) {
+void* bar(void *arg) {
     while (1) {
         printf("bar\n");
         sleep(1);  // Sleep to avoid flooding the console
@@ -23,11 +23,11 @@ int main(int argc, char **argv) {
     worker_t thread1, thread2;
 
     // Initialize the scheduler
-    //init_scheduler();
+    init_scheduler();
 
     // Create two threads
-    worker_create(&thread1, NULL, (void* (*)(void*))foo, NULL);
-    worker_create(&thread2, NULL, (void* (*)(void*))bar, NULL);
+    worker_create(&thread1, NULL, foo, NULL);
+    worker_create(&thread2, NULL, bar, NULL);
 
     // For this test, just loop indefinitely in main
     // In a real scenario, you might want to join the threads or perform other operations.
