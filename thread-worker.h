@@ -22,9 +22,9 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <string.h>
+#include <stdint.h>
 
-
-typedef uint worker_t;
+typedef uint32_t worker_t;
 
 // Enumeration for thread status
 typedef enum {
