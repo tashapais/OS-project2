@@ -20,33 +20,45 @@ typedef struct ThreadNode {
 } ThreadNode;
 
 // Global variables
-ThreadNode *head = NULL;           // Head of the ready queue
-ThreadNode *tail = NULL;           // Tail of the ready queue
 ucontext_t scheduler_context;      // Scheduler's context
 tcb *current_thread = NULL;        // Pointer to the currently executing thread
 
-// Function to add a thread to the ready queue
-void enqueue(tcb *thread) {
+typedef struct Queue {
+    ThreadNode *head;
+    ThreadNode *tail;
+} Queue;
+
+Queue ready_queue;
+Queue blocked_queue;
+
+// Initialize a queue
+void init_queue(Queue *q) {
+    q->head = NULL;
+    q->tail = NULL;
+}
+
+// General enqueue function
+void enqueue(Queue *q, tcb *thread) {
     ThreadNode *newNode = malloc(sizeof(ThreadNode));
     newNode->thread = thread;
     newNode->next = NULL;
 
-    if (!head) {
-        head = tail = newNode;
+    if (!q->head) {
+        q->head = q->tail = newNode;
     } else {
-        tail->next = newNode;
-        tail = newNode;
+        q->tail->next = newNode;
+        q->tail = newNode;
     }
 }
 
-// Function to remove a thread from the ready queue
-tcb* dequeue() {
-    if (!head) return NULL;
+// General dequeue function
+tcb* dequeue(Queue *q) {
+    if (!q->head) return NULL;
 
-    ThreadNode *temp = head;
+    ThreadNode *temp = q->head;
     tcb *thread = temp->thread;
 
-    head = head->next;
+    q->head = q->head->next;
     free(temp);
 
     return thread;
@@ -111,7 +123,7 @@ int worker_create(worker_t *thread, pthread_attr_t *attr,
     makecontext(&(newThread->context), (void (*)())function, 1, arg);
 
     // Add the thread to the ready queue
-    enqueue(newThread);
+    enqueue(&ready_queue, newThread);
 
     return 0;
 }
@@ -122,7 +134,7 @@ int worker_yield() {
 
     // Change the thread's state to ready and add it to the ready queue
     current_thread->status = THREAD_READY;
-    enqueue(current_thread);
+    enqueue(&ready_queue, current_thread);
 
     // Switch to the scheduler's context
     setcontext(&scheduler_context);
@@ -143,7 +155,7 @@ void worker_exit(void *value_ptr) {
 }
 
 tcb* get_tcb_by_id(worker_t thread_id) {
-    ThreadNode* temp = head;  // Assuming 'head' is the starting point of your global list of TCBs
+    ThreadNode* temp = ready_queue.head;  // Assuming 'head' is the starting point of your global list of TCBs
 
     while (temp) {
         if (temp->thread->thread_id == thread_id) {
@@ -162,19 +174,19 @@ int is_thread_terminated(worker_t thread_id) {
 }
 void free_thread_resources(worker_t thread_id) {
     // Check if the list is empty
-    if (!head) return;
+    if (!ready_queue.head) return;
 
     // Special case: if the thread to be removed is at the head of the list
-    if (head->thread->thread_id == thread_id) {
-        ThreadNode *temp = head;
-        head = head->next;
+    if (ready_queue.head->thread->thread_id == thread_id) {
+        ThreadNode *temp = ready_queue.head;
+        ready_queue.head = ready_queue.head->next;
         free(temp);
         return;
     }
 
     // Traverse the list to find the node to be removed
-    ThreadNode *prev = head;
-    ThreadNode *current = head->next;
+    ThreadNode *prev = ready_queue.head;
+    ThreadNode *current = ready_queue.head->next;
     while (current != NULL && current->thread->thread_id != thread_id) {
         prev = current;
         current = current->next;
@@ -187,8 +199,8 @@ void free_thread_resources(worker_t thread_id) {
     prev->next = current->next;
 
     // If the thread to be removed is at the tail of the list
-    if (tail == current) {
-        tail = prev;
+    if (ready_queue.tail == current) {
+        ready_queue.tail = prev;
     }
 
     // Free the node
@@ -214,6 +226,24 @@ int worker_mutex_init(worker_mutex_t *mutex, const pthread_mutexattr_t *mutexatt
     mutex->is_locked = 0;    // Mutex is initially unlocked
     mutex->owner = NULL;    // No owner at the start
     return 0;
+}
+// Function to block the current thread
+void block_current_thread() {
+    // Change the thread's state to blocked
+    current_thread->status = THREAD_BLOCKED;
+
+    // Add the thread to the blocked queue
+    enqueue(&blocked_queue, current_thread);
+}
+
+
+// Function to move all threads from the blocked queue to the ready queue
+void move_blocked_to_ready() {
+    while (blocked_queue.head) {
+        tcb *thread = dequeue(&blocked_queue);
+        thread->status = THREAD_READY;
+        enqueue(&ready_queue, thread);
+    }
 }
 
 /* acquire the mutex lock */
@@ -280,9 +310,9 @@ static void schedule() {
 // #else 
 // 	// Choose MLFQ
 // #endif
-	//simple round robin scheduler
+	//simple round robin 
     while (1) {
-        current_thread = dequeue();
+        current_thread = dequeue(&ready_queue);
         if (current_thread) {
             setcontext(&(current_thread->context));
         } else {
