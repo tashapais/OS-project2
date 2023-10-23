@@ -52,8 +52,46 @@ tcb* dequeue() {
     return thread;
 }
 
+static void schedule();
+//Define a signal handler function that will be called when the timer goes off. 
+//This function will be responsible for invoking the scheduler
+void timer_signal_handler(int signum) {
+    if (current_thread) {
+        // Switch to the scheduler's context
+        swapcontext(&(current_thread->context), &scheduler_context);
+    } else {
+        setcontext(&scheduler_context);
+    }
+}
+void init_timer() {
+    // Register the signal handler
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = timer_signal_handler;
+    sigaction(SIGPROF, &sa, NULL);
+
+    // Set up the timer to go off after 1 second
+    struct itimerval timer;
+    timer.it_interval.tv_usec = 0;
+    timer.it_interval.tv_sec = 0;
+    timer.it_value.tv_usec = 0;
+    timer.it_value.tv_sec = 1;
+    setitimer(ITIMER_PROF, &timer, NULL);
+}
+
 int worker_create(worker_t *thread, pthread_attr_t *attr, 
                   void *(*function)(void*), void *arg) {
+    static int firstCall = 1;
+    if (firstCall) {
+        firstCall = 0; //separate scheduler context initialized the first time worker_create() is called
+        getcontext(&scheduler_context);
+        scheduler_context.uc_stack.ss_sp = malloc(SIGSTKSZ);
+        scheduler_context.uc_stack.ss_size = SIGSTKSZ;
+        scheduler_context.uc_link = 0; // No next context after scheduler ends (though it shouldn't end)
+        makecontext(&scheduler_context, schedule, 0); // Assuming you have a scheduler function
+        init_timer();
+    }
+
     tcb *newThread = malloc(sizeof(tcb));
 
     // Assign a unique thread ID. For simplicity, we'll use a static counter.
@@ -184,13 +222,31 @@ static void schedule() {
 
 	// YOUR CODE HERE
 
-// - schedule policy
-#ifndef MLFQ
-	// Choose PSJF
-#else 
-	// Choose MLFQ
-#endif
+// // - schedule policy
+// #ifndef MLFQ
+// 	// Choose PSJF
+// #else 
+// 	// Choose MLFQ
+// #endif
+	//simple round robin scheduler
+    while (1) {
+        current_thread = dequeue();
+        if (current_thread) {
+            setcontext(&(current_thread->context));
+        } else {
+            // If there are no more threads, exit the scheduler
+            break;
+        }
+    }
+}
 
+// Initialize the scheduler's context. This should be called once.
+void init_scheduler() {
+    getcontext(&scheduler_context);
+    scheduler_context.uc_stack.ss_sp = malloc(SIGSTKSZ);
+    scheduler_context.uc_stack.ss_size = SIGSTKSZ;
+    scheduler_context.uc_link = 0;
+    makecontext(&scheduler_context, schedule, 0);
 }
 
 /* Pre-emptive Shortest Job First (POLICY_PSJF) scheduling algorithm */
@@ -218,9 +274,4 @@ void print_app_stats(void) {
        fprintf(stderr, "Average turnaround time %lf \n", avg_turn_time);
        fprintf(stderr, "Average response time  %lf \n", avg_resp_time);
 }
-
-
-// Feel free to add any other functions you need
-
-// YOUR CODE HERE
 
